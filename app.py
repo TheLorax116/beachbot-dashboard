@@ -250,14 +250,14 @@ try:
     
     # Calculate P&L
     total_profit = (all_time['total_won'] or 0) - (all_time['total_lost'] or 0)
-    win_rate = (all_time['total_won'] / (all_time['total_won'] + all_time['total_lost']) * 100) if (all_time['total_won'] + all_time['total_lost']) > 0 else 0
+    win_rate = ( (all_time['total_won'] or 0) / ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) * 100 ) if ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) > 0 else 0
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("💰 Total P&L", f"${total_profit:,.2f}")
     col2.metric("📈 Win Rate", f"{win_rate:.1f}%")
     col3.metric("🔄 Total Trades", f"{all_time['total_trades']}")
     col4.metric("💸 Total Fees", f"{total_fees} bps")
-    col5.metric("🏆 Wins", f"${all_time['total_won']:,.2f}")
+    col5.metric("🏆 Wins", f"${all_time['total_won'] or 0:,.2f}")
     
     st.markdown("---")
     
