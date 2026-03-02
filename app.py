@@ -246,10 +246,7 @@ else:
     conn.commit()
     conn.close()
 
-try:
-    
-    conn.commit()
-    conn.close()
+    conn = sqlite3.connect(DB_PATH)
     
     # ===== TOP METRICS ROW =====
     st.subheader("📊 ULTRA METRICS")
