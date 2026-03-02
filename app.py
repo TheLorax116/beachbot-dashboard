@@ -200,6 +200,7 @@ import tempfile
 # Try local path first
 local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
 cloud_path = "/mount/src/copybot.sqlite"
+    try:
 
 if os.path.exists(local_path):
     DB_PATH = local_path
