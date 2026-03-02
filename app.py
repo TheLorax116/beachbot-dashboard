@@ -208,7 +208,7 @@ elif os.path.exists(cloud_path):
     DB_PATH = cloud_path
     st.info("☁️ Using cloud database")
 else:
-    st.warning("⚠️ No database found - running in demo mode")
+    st.info("🌊 BeachBot ULTRA - Fresh Start March 2, 2026")
     # Create a temporary database for demo
     demo_db = tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False)
     DB_PATH = demo_db.name
@@ -227,47 +227,14 @@ else:
             source TEXT
         )
     """)
+    # Insert clean start message only - no demo data
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS my_positions (
-            token_id TEXT PRIMARY KEY,
-            condition_id TEXT,
-            entry_price REAL,
-            size REAL,
-            entry_time INTEGER,
-            status TEXT DEFAULT ACTIVE
-        )
-    """)
-    # Insert demo data
-    import random
-    import time
-    now = int(time.time())
-    # Demo ledger entries
-    for i in range(10):
-        ts = now - (i * 3600)
-        action = random.choice(['BUY', 'SELL', 'REDEEM', 'EXPIRE'])
-        price = round(random.uniform(0.5, 0.99), 2)
-        size = round(random.uniform(1, 10), 2)
-        usd = price * size
-        conn.execute(
-            "INSERT INTO ledger (ts, action, price, size, usd, note) VALUES (?, ?, ?, ?, ?, ?)",
-            (ts, action, price, size, usd, f"Demo {action}")
-        )
+        INSERT INTO ledger (ts, action, price, size, usd, note) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (int(time.time()), 'INFO', 0, 0, 0, 'BeachBot ULTRA - Fresh Start March 2, 2026'))
     
-    # Demo active positions
-    for i in range(3):
-        token_id = f"demo_token_{i}"
-        entry_price = round(random.uniform(0.5, 0.95), 2)
-        size = round(random.uniform(1, 5), 2)
-        entry_time = now - (i * 7200)
-        conn.execute(
-            "INSERT INTO my_positions (token_id, entry_price, size, entry_time, status) VALUES (?, ?, ?, ?, ?)",
-            (token_id, entry_price, size, entry_time, 'ACTIVE')
-        )
     conn.commit()
     conn.close()
-
-try:
-    conn = sqlite3.connect(DB_PATH)
     
     # ===== TOP METRICS ROW =====
     st.subheader("📊 ULTRA METRICS")
