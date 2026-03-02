@@ -248,15 +248,20 @@ else:
 
     conn = sqlite3.connect(DB_PATH)
     
-    # ===== TOP METRICS ROW =====
-    st.subheader("📊 ULTRA METRICS")
-    
-    # Get all time stats
-    all_time = pd.read_sql_query("""
-        SELECT 
-            COUNT(*) as total_trades,
-            SUM(CASE WHEN action='BUY' THEN usd ELSE 0 END) as total_bought,
-            SUM(CASE WHEN action='SELL' THEN usd ELSE 0 END) as total_sold,
+    try:
+        # ===== TOP METRICS ROW =====
+        st.subheader("📊 ULTRA METRICS")
+        
+        # Get all time stats
+        all_time = pd.read_sql_query("""
+            SELECT 
+                COUNT(*) as total_trades,
+                SUM(CASE WHEN action='BUY' THEN usd ELSE 0 END) as total_bought,
+                SUM(CASE WHEN action='SELL' THEN usd ELSE 0 END) as total_sold,
+                SUM(CASE WHEN action='REDEEM' THEN usd ELSE 0 END) as total_won,
+                SUM(CASE WHEN action='EXPIRE' THEN usd ELSE 0 END) as total_lost
+            FROM ledger
+        """, conn).iloc[0]
             SUM(CASE WHEN action='REDEEM' THEN usd ELSE 0 END) as total_won,
             SUM(CASE WHEN action='EXPIRE' THEN usd ELSE 0 END) as total_lost
         FROM ledger
