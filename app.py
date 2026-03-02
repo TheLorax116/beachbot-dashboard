@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
+import time
 
 # Page config MUST be the first Streamlit command
 st.set_page_config(
