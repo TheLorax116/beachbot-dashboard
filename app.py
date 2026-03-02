@@ -194,11 +194,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Database path
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
+# Database path - handle cloud vs local
+import tempfile
 
-if not os.path.exists(DB_PATH):
-    st.error(f"❌ Database not found at: {DB_PATH}")
-    st.stop()
+# Try local path first
+local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
+cloud_path = "/mount/src/copybot.sqlite"
+
+if os.path.exists(local_path):
+    DB_PATH = local_path
+    st.info("📁 Using local database")
+elif os.path.exists(cloud_path):
+    DB_PATH = cloud_path
+    st.info("☁️ Using cloud database")
+else:
+    st.warning("⚠️ No database found - running in demo mode")
+    # Create a temporary database for demo
+    demo_db = tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False)
+    DB_PATH = demo_db.name
+    # Initialize empty tables
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("CREATE TABLE IF NOT EXISTS ledger (ts INTEGER, action TEXT, price REAL, size REAL, usd REAL, note TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS my_positions (token_id TEXT, entry_price REAL, size REAL, status TEXT)")
+    conn.close()
 
 try:
     conn = sqlite3.connect(DB_PATH)
