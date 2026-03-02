@@ -200,7 +200,6 @@ import tempfile
 # Try local path first
 local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
 cloud_path = "/mount/src/copybot.sqlite"
-    try:
 
 if os.path.exists(local_path):
     DB_PATH = local_path
@@ -228,11 +227,25 @@ else:
             source TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS my_positions (
+            token_id TEXT PRIMARY KEY,
+            condition_id TEXT,
+            entry_price REAL,
+            size REAL,
+            entry_time INTEGER,
+            status TEXT DEFAULT 'ACTIVE'
+        )
+    """)
     # Insert clean start message only - no demo data
     conn.execute("""
         INSERT INTO ledger (ts, action, price, size, usd, note) 
         VALUES (?, ?, ?, ?, ?, ?)
     """, (int(time.time()), 'INFO', 0, 0, 0, 'BeachBot ULTRA - Fresh Start March 2, 2026'))
+    conn.commit()
+    conn.close()
+
+try:
     
     conn.commit()
     conn.close()
