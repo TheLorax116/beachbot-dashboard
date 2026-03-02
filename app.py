@@ -195,10 +195,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Database path
-# Database path - handle cloud vs local
 import tempfile
 
-# Try local path first
 local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
 cloud_path = "/mount/src/copybot.sqlite"
 
@@ -210,10 +208,8 @@ elif os.path.exists(cloud_path):
     st.info("☁️ Using cloud database")
 else:
     st.info("🌊 BeachBot ULTRA - Fresh Start March 2, 2026")
-    # Create a temporary database for demo
     demo_db = tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False)
     DB_PATH = demo_db.name
-    # Initialize empty tables with correct schema
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS ledger (
@@ -238,7 +234,6 @@ else:
             status TEXT DEFAULT 'ACTIVE'
         )
     """)
-    # Insert clean start message only - no demo data
     conn.execute("""
         INSERT INTO ledger (ts, action, price, size, usd, note) 
         VALUES (?, ?, ?, ?, ?, ?)
@@ -246,31 +241,23 @@ else:
     conn.commit()
     conn.close()
 
+try:
     conn = sqlite3.connect(DB_PATH)
     
-    try:
-        # ===== TOP METRICS ROW =====
-        st.subheader("📊 ULTRA METRICS")
-        
-        # Get all time stats
-        all_time = pd.read_sql_query("""
-            SELECT 
-                COUNT(*) as total_trades,
-                SUM(CASE WHEN action='BUY' THEN usd ELSE 0 END) as total_bought,
-                SUM(CASE WHEN action='SELL' THEN usd ELSE 0 END) as total_sold,
-                SUM(CASE WHEN action='REDEEM' THEN usd ELSE 0 END) as total_won,
-                SUM(CASE WHEN action='EXPIRE' THEN usd ELSE 0 END) as total_lost
-            FROM ledger
-        """, conn).iloc[0]
+    # ===== TOP METRICS ROW =====
+    st.subheader("📊 ULTRA METRICS")
+    
+    all_time = pd.read_sql_query("""
+        SELECT 
+            COUNT(*) as total_trades,
+            SUM(CASE WHEN action='BUY' THEN usd ELSE 0 END) as total_bought,
+            SUM(CASE WHEN action='SELL' THEN usd ELSE 0 END) as total_sold,
             SUM(CASE WHEN action='REDEEM' THEN usd ELSE 0 END) as total_won,
             SUM(CASE WHEN action='EXPIRE' THEN usd ELSE 0 END) as total_lost
         FROM ledger
     """, conn).iloc[0]
     
-    # Get fee stats (from notes column)
-    fee_data = pd.read_sql_query("""
-        SELECT note FROM ledger WHERE note LIKE '%fee:%'
-    """, conn)
+    fee_data = pd.read_sql_query("SELECT note FROM ledger WHERE note LIKE '%fee:%'", conn)
     
     total_fees = 0
     for note in fee_data['note']:
@@ -280,9 +267,8 @@ else:
         except:
             pass
     
-    # Calculate P&L
     total_profit = (all_time['total_won'] or 0) - (all_time['total_lost'] or 0)
-    win_rate = ( (all_time['total_won'] or 0) / ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) * 100 ) if ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) > 0 else 0
+    win_rate = ((all_time['total_won'] or 0) / ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) * 100) if ((all_time['total_won'] or 0) + (all_time['total_lost'] or 0)) > 0 else 0
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("💰 Total P&L", f"${total_profit:,.2f}")
@@ -323,18 +309,17 @@ else:
     else:
         st.info("No P&L data available")
     
-    # ===== ACTIVE POSITIONS WITH P&L =====
-    st.subheader("📊 Active Positions with Real-time P&L")
+    st.markdown("---")
+    
+    # ===== ACTIVE POSITIONS =====
+    st.subheader("📊 Active Positions")
     
     positions = pd.read_sql_query("""
         SELECT 
             token_id,
             entry_price,
             size,
-            datetime(entry_time, 'unixepoch') as entry_time,
-            (SELECT price FROM (
-                SELECT ts, price FROM ledger WHERE token_id = my_positions.token_id AND action='BUY' ORDER BY ts DESC LIMIT 1
-            )) as current_price
+            datetime(entry_time, 'unixepoch') as entry_time
         FROM my_positions 
         WHERE status = 'ACTIVE'
         ORDER BY size DESC
@@ -342,31 +327,14 @@ else:
     
     if not positions.empty:
         positions['value'] = positions['size'] * positions['entry_price']
-        positions['current_value'] = positions['size'] * positions['current_price'].fillna(positions['entry_price'])
-        positions['pnl'] = positions['current_value'] - positions['value']
-        positions['pnl_pct'] = (positions['pnl'] / positions['value'] * 100).round(1)
-        
-        # Color code P&L
-        def color_pnl(val):
-            return f'<span class="profit">+${val:,.2f}</span>' if val > 0 else f'<span class="loss">-${abs(val):,.2f}</span>'
-        
-        positions['pnl_display'] = positions.apply(lambda x: color_pnl(x['pnl']), axis=1)
-        
-        display_cols = ['token_id', 'size', 'entry_price', 'value', 'pnl_display', 'pnl_pct', 'entry_time']
-        st.write(positions[display_cols].to_html(escape=False, index=False), unsafe_allow_html=True)
-        
-        total_exposure = positions['value'].sum()
-        total_pnl = positions['pnl'].sum()
-        
-        col1, col2 = st.columns(2)
-        col1.metric("💰 Total Exposure", f"${total_exposure:,.2f}")
-        col2.metric("📈 Unrealized P&L", f"${total_pnl:,.2f}", delta=f"{total_pnl/total_exposure*100:.1f}%" if total_exposure > 0 else None)
+        st.dataframe(positions, use_container_width=True)
+        st.metric("💰 Total Exposure", f"${positions['value'].sum():,.2f}")
     else:
         st.info("No active positions")
     
     st.markdown("---")
     
-    # ===== RECENT TRADES WITH FEES =====
+    # ===== RECENT TRADES =====
     st.subheader("📝 Recent Trades")
     
     trades = pd.read_sql_query("""
@@ -376,56 +344,17 @@ else:
             price,
             size,
             usd,
-            note,
-            CASE 
-                WHEN note LIKE '%fee:%' THEN 
-                    CAST(SUBSTR(note, INSTR(note, 'fee:')+4, INSTR(note, 'bps')-INSTR(note, 'fee:')-4) as INTEGER)
-                ELSE 0 
-            END as fee_bps
+            note
         FROM ledger 
-        WHERE action IN ('BUY', 'SELL')
+        WHERE action IN ('BUY', 'SELL', 'REDEEM', 'EXPIRE')
         ORDER BY ts DESC 
         LIMIT 25
     """, conn)
     
     if not trades.empty:
-        # Format for display
-        trades['fee_display'] = trades.apply(lambda x: f"{x['fee_bps']} bps" if x['fee_bps'] > 0 else "", axis=1)
-        trades['action'] = trades['action'].apply(lambda x: f"🔴 {x}" if x == 'BUY' else f"🟢 {x}")
-        trades['usd'] = trades['usd'].apply(lambda x: f"${x:,.2f}")
-        
-        st.dataframe(trades[['time', 'action', 'price', 'size', 'usd', 'fee_display']], use_container_width=True)
+        st.dataframe(trades, use_container_width=True)
     else:
         st.info("No recent trades")
-    
-    # ===== PERFORMANCE METRICS =====
-    st.markdown("---")
-    st.subheader("🎯 Performance Metrics")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # Average win/loss
-    avg_stats = pd.read_sql_query("""
-        SELECT 
-            AVG(CASE WHEN action='REDEEM' THEN usd END) as avg_win,
-            AVG(CASE WHEN action='EXPIRE' THEN usd END) as avg_loss,
-            COUNT(CASE WHEN action='REDEEM' THEN 1 END) as wins,
-            COUNT(CASE WHEN action='EXPIRE' THEN 1 END) as losses
-        FROM ledger
-    """, conn).iloc[0]
-    
-    col1.metric("🏆 Avg Win", f"${avg_stats['avg_win']:,.2f}" if avg_stats['avg_win'] else "$0")
-    col2.metric("💔 Avg Loss", f"${avg_stats['avg_loss']:,.2f}" if avg_stats['avg_loss'] else "$0")
-    col3.metric("🎯 Win/Loss Ratio", f"{(avg_stats['avg_win']/avg_stats['avg_loss']):.2f}" if avg_stats['avg_win'] and avg_stats['avg_loss'] else "N/A")
-    col4.metric("📊 Total Events", f"{avg_stats['wins'] + avg_stats['losses']}")
-    
-    # Market filter stats
-    market_stats = pd.read_sql_query("""
-        SELECT note FROM ledger WHERE note LIKE '%preferred%' OR note LIKE '%filter%'
-    """, conn)
-    
-    if not market_stats.empty:
-        st.info(f"🎯 Market filters active - {len(market_stats)} filtered trades")
     
     conn.close()
     
