@@ -1,0 +1,416 @@
+import streamlit as st
+import sqlite3
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import os
+
+# Page config MUST be the first Streamlit command
+st.set_page_config(
+    page_title="BeachBot",
+    page_icon="🍓",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Password protection
+def check_password():
+    """Returns True if user entered correct password"""
+
+    def password_entered():
+        """Checks whether the password entered by the user is correct."""
+        if st.session_state["password"] == "money":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.markdown("""
+        <style>
+        .password-box {
+            background: #003b6f;
+            padding: 2rem;
+            border-radius: 10px;
+            border: 2px solid #fff200;
+            max-width: 400px;
+            margin: 100px auto;
+            text-align: center;
+        }
+        .password-box h2 {
+            color: #fff200 !important;
+            margin-bottom: 1rem;
+        }
+        .password-box p {
+            color: white;
+            margin-bottom: 2rem;
+        }
+        </style>
+        <div class="password-box">
+            <h2>🍓 BeachBot</h2>
+            <p>Enter password to access dashboard</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.text_input(
+            "Password", 
+            type="password", 
+            on_change=password_entered, 
+            key="password",
+            label_visibility="collapsed"
+        )
+        return False
+    elif not st.session_state["password_correct"]:
+        st.markdown("""
+        <style>
+        .password-box {
+            background: #003b6f;
+            padding: 2rem;
+            border-radius: 10px;
+            border: 2px solid #ff3333;
+            max-width: 400px;
+            margin: 100px auto;
+            text-align: center;
+        }
+        .password-box h2 {
+            color: #fff200 !important;
+            margin-bottom: 1rem;
+        }
+        .password-box p {
+            color: #ff3333;
+            margin-bottom: 2rem;
+        }
+        </style>
+        <div class="password-box">
+            <h2>🍓 BeachBot</h2>
+            <p>❌ Incorrect password</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.text_input(
+            "Password", 
+            type="password", 
+            on_change=password_entered, 
+            key="password",
+            label_visibility="collapsed"
+        )
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
+
+# Custom CSS for handsome grey theme with neon green
+st.markdown("""
+<style>
+    /* Best Buy Yellow: #fff200, Best Buy Blue: #003b6f, Neon Green: #39ff14 */
+    
+    /* Main background - handsome grey */
+    .stApp {
+        background: #2c2c2c !important;
+    }
+    
+    /* Sidebar background - slightly darker grey */
+    section[data-testid="stSidebar"] {
+        background: #1e1e1e !important;
+        border-right: 2px solid #fff200;
+    }
+    
+    /* Mobile responsive adjustments */
+    @media (max-width: 768px) {
+        .beach-header h1 {
+            font-size: 2rem !important;
+        }
+        .beach-header h3 {
+            font-size: 0.9rem !important;
+        }
+        .header-drink {
+            width: 40px !important;
+            height: 40px !important;
+        }
+        div[data-testid="column"] {
+            min-width: 50% !important;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.5rem !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            font-size: 0.8rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+    
+    /* Header styling - Best Buy Blue with Best Buy Yellow text */
+    .beach-header {
+        background: #003b6f;
+        padding: 1rem 2rem;
+        border-radius: 0;
+        margin: -1rem -1rem 2rem -1rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        border-bottom: 4px solid #fff200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .header-drink {
+        width: 60px;
+        height: 60px;
+        filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+        animation: sway 3s ease-in-out infinite;
+    }
+    
+    @keyframes sway {
+        0%, 100% { transform: rotate(-5deg); }
+        50% { transform: rotate(5deg); }
+    }
+    
+    .header-text {
+        text-align: center;
+    }
+    
+    .beach-header h1 {
+        color: #fff200 !important;
+        font-size: 3.5rem;
+        text-shadow: 2px 2px 0px #002b4f;
+        margin: 0;
+        font-family: 'Arial Black', sans-serif;
+        letter-spacing: 2px;
+        line-height: 1.2;
+    }
+    
+    .beach-header h3 {
+        color: #ffffff !important;
+        font-size: 1.2rem;
+        font-style: italic;
+        text-shadow: 1px 1px 0px #002b4f;
+        font-weight: 300;
+        margin: 0.25rem 0 0 0;
+        opacity: 0.95;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* Neon green for all headers */
+    h1, h2, h3, h4, h5, h6 {
+        color: #39ff14 !important;
+        font-weight: 600 !important;
+        text-shadow: 0 0 5px rgba(57, 255, 20, 0.3);
+    }
+    
+    /* Subheader styling */
+    .stMarkdown h2 {
+        color: #39ff14 !important;
+        border-bottom: 2px solid #fff200;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Metric labels - neon green */
+    [data-testid="stMetricLabel"] {
+        color: #39ff14 !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* Metric values - Best Buy Yellow */
+    [data-testid="stMetricValue"] {
+        color: #fff200 !important;
+        font-weight: 700 !important;
+        font-size: 1.8rem !important;
+        text-shadow: 0 0 10px rgba(255, 242, 0, 0.3);
+    }
+    
+    /* Metric deltas */
+    [data-testid="stMetricDelta"] [data-testid="stMetricDeltaGreen"] {
+        color: #00ff00 !important;
+    }
+    
+    [data-testid="stMetricDelta"] [data-testid="stMetricDeltaRed"] {
+        color: #ff4444 !important;
+    }
+    
+    /* Remove boxes from metrics */
+    div[data-testid="stMetric"] {
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0.3rem !important;
+    }
+    
+    /* DataFrame styling */
+    div[data-testid="stDataFrame"] {
+        background: #1e1e1e !important;
+        border: 1px solid #3a3a3a;
+        border-radius: 5px;
+    }
+    
+    .stDataFrame th {
+        color: #39ff14 !important;
+        background-color: #2a2a2a !important;
+        border-bottom: 2px solid #fff200 !important;
+    }
+    
+    .stDataFrame td {
+        color: #e0e0e0 !important;
+        background-color: #1e1e1e !important;
+    }
+    
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 1rem;
+        background: #1e1e1e;
+        padding: 0.5rem;
+        border-radius: 5px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #e0e0e0;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #39ff14 !important;
+        border-bottom-color: #fff200 !important;
+    }
+    
+    /* Buttons */
+    .stButton button {
+        background-color: #003b6f;
+        color: white;
+        border: none;
+        border-radius: 4px;
+    }
+    
+    .stButton button:hover {
+        background-color: #fff200;
+        color: #003b6f;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem 0.5rem 0.5rem;
+        color: #39ff14;
+        border-top: 2px solid #fff200;
+        margin-top: 2rem;
+    }
+    
+    /* Chart containers */
+    .js-plotly-plot, .plotly-graph-div {
+        background: #1e1e1e !important;
+        border-radius: 5px;
+        border: 1px solid #3a3a3a;
+    }
+    
+    .gtitle, .xtitle, .ytitle, .legendtext {
+        color: #39ff14 !important;
+        fill: #39ff14 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Beach Header
+st.markdown("""
+<div class="beach-header">
+    <img class="header-drink" src="https://cdn-icons-png.flaticon.com/512/2935/2935448.png" alt="Strawberry Margarita">
+    <div class="header-text">
+        <h1>BeachBot</h1>
+        <h3>RIDING THE POLYMARKET WAVES</h3>
+    </div>
+    <img class="header-drink" src="https://cdn-icons-png.flaticon.com/512/2935/2935448.png" alt="Strawberry Margarita">
+</div>
+""", unsafe_allow_html=True)
+
+# Database path
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
+
+if not os.path.exists(DB_PATH):
+    st.error(f"❌ Database not found at: {DB_PATH}")
+    st.stop()
+
+try:
+    conn = sqlite3.connect(DB_PATH)
+    
+    # SUMMARY METRICS
+    st.subheader("📊 Trading Summary")
+    
+    action_counts = pd.read_sql_query("""
+        SELECT action, COUNT(*) as count, SUM(usd) as total 
+        FROM ledger 
+        GROUP BY action
+    """, conn)
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    buys = action_counts[action_counts['action'] == 'BUY']
+    sells = action_counts[action_counts['action'] == 'SELL']
+    redeems = action_counts[action_counts['action'] == 'REDEEM']
+    expires = action_counts[action_counts['action'] == 'EXPIRE']
+    
+    col1.metric("📝 Trades", len(action_counts))
+    col2.metric("🟢 Buys", buys['count'].iloc[0] if not buys.empty else 0)
+    col3.metric("🔴 Sells", sells['count'].iloc[0] if not sells.empty else 0)
+    col4.metric("🏆 Redeems", redeems['count'].iloc[0] if not redeems.empty else 0)
+    col5.metric("💔 Expires", expires['count'].iloc[0] if not expires.empty else 0)
+    
+    st.markdown("---")
+    
+    # RECENT LEDGER
+    st.subheader("📝 Recent Activity")
+    ledger_df = pd.read_sql_query("""
+        SELECT 
+            datetime(ts, 'unixepoch') as time,
+            action,
+            price,
+            size,
+            usd,
+            note
+        FROM ledger 
+        ORDER BY ts DESC 
+        LIMIT 50
+    """, conn)
+    
+    if not ledger_df.empty:
+        st.dataframe(ledger_df, use_container_width=True)
+    else:
+        st.info("No ledger entries")
+    
+    st.markdown("---")
+    
+    # ACTIVE POSITIONS
+    st.subheader("📈 Current Positions")
+    positions_df = pd.read_sql_query("""
+        SELECT 
+            token_id,
+            entry_price,
+            size,
+            datetime(entry_time, 'unixepoch') as entry_time
+        FROM my_positions 
+        WHERE status = 'ACTIVE'
+        ORDER BY size DESC
+    """, conn)
+    
+    if not positions_df.empty:
+        positions_df['value'] = positions_df['size'] * positions_df['entry_price']
+        st.dataframe(positions_df, use_container_width=True)
+        st.metric("💰 Total Exposure", f"${positions_df['value'].sum():,.2f}")
+    else:
+        st.info("No active positions")
+    
+    conn.close()
+    
+except Exception as e:
+    st.error(f"Error: {e}")
+    st.exception(e)
+
+# Footer
+st.markdown("""
+<div class="footer">
+    🌊 catching waves • tracking trades • riding profits • {}
+</div>
+""".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S')), unsafe_allow_html=True)

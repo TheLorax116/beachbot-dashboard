@@ -1,0 +1,255 @@
+import streamlit as st
+import sqlite3
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+import os
+import time
+
+# Page config
+st.set_page_config(
+    page_title="Polymarket Copy Bot Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1E88E5;
+        text-align: center;
+        padding: 1rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stButton>button {
+        width: 100%;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Database path
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "copybot.sqlite")
+
+# Sidebar
+with st.sidebar:
+    st.image("https://polymarket.com/favicon.ico", width=50)
+    st.title("📊 Navigation")
+    
+    page = st.radio(
+        "Select View",
+        ["🏠 Dashboard", "📈 Positions", "📝 Ledger", "⚙️ Settings"]
+    )
+    
+    st.markdown("---")
+    
+    # Manual refresh button instead of auto-refresh
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if st.button("🔄 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+# Database functions
+@st.cache_data(ttl=10)
+def load_dashboard_data():
+    """Load all dashboard data from database"""
+    if not os.path.exists(DB_PATH):
+        return {'error': f"Database not found at {DB_PATH}"}
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        
+        # Get summary stats
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM positions")
+        positions_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM ledger")
+        ledger_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT SUM(usd) FROM ledger WHERE side='BUY'")
+        total_buy = cursor.fetchone()[0] or 0
+        
+        cursor.execute("SELECT SUM(usd) FROM ledger WHERE side='SELL'")
+        total_sell = cursor.fetchone()[0] or 0
+        
+        # Get recent trades
+        recent_df = pd.read_sql_query("""
+            SELECT 
+                datetime(ts, 'unixepoch') as timestamp,
+                token_id,
+                side,
+                price,
+                size,
+                usd,
+                note
+            FROM ledger 
+            ORDER BY ts DESC 
+            LIMIT 50
+        """, conn)
+        
+        # Get positions
+        positions_df = pd.read_sql_query("""
+            SELECT 
+                token_id,
+                entry_price,
+                original_size,
+                sold_50,
+                sold_100,
+                stopped
+            FROM positions 
+            ORDER BY original_size DESC
+            LIMIT 20
+        """, conn)
+        
+        conn.close()
+        
+        return {
+            'positions_count': positions_count,
+            'ledger_count': ledger_count,
+            'total_buy': total_buy,
+            'total_sell': total_sell,
+            'net_pnl': total_sell - total_buy,
+            'recent_df': recent_df,
+            'positions_df': positions_df,
+            'error': None
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+# Load data
+data = load_dashboard_data()
+
+# Main content
+if page == "🏠 Dashboard":
+    st.markdown('<h1 class="main-header">📊 Polymarket Copy Trading Bot</h1>', unsafe_allow_html=True)
+    
+    if data.get('error'):
+        st.error(f"Error loading data: {data['error']}")
+    else:
+        # Metrics row
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric("📈 Positions", data['positions_count'])
+        with col2:
+            st.metric("📝 Total Trades", data['ledger_count'])
+        with col3:
+            st.metric("💰 Total Buy", f"${data['total_buy']:,.2f}")
+        with col4:
+            st.metric("💵 Total Sell", f"${data['total_sell']:,.2f}")
+        with col5:
+            pnl = data['net_pnl']
+            st.metric("📊 Net P&L", f"${pnl:,.2f}", 
+                     delta=f"{(pnl/data['total_buy']*100):.1f}%" if data['total_buy'] > 0 else "0%")
+        
+        st.markdown("---")
+        
+        # Recent trades
+        st.subheader("🔄 Recent Trades")
+        if not data['recent_df'].empty:
+            display_df = data['recent_df'].copy()
+            display_df['price'] = display_df['price'].map('${:.4f}'.format)
+            display_df['usd'] = display_df['usd'].map('${:.2f}'.format)
+            
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "timestamp": "Time",
+                    "token_id": st.column_config.TextColumn("Token ID", width="medium"),
+                    "side": "Side",
+                    "price": "Price",
+                    "size": "Size",
+                    "usd": "Value",
+                    "note": "Note"
+                }
+            )
+        else:
+            st.info("No recent trades")
+
+elif page == "📈 Positions":
+    st.header("📈 Current Positions")
+    
+    if not data['positions_df'].empty:
+        df = data['positions_df'].copy()
+        
+        # Calculate remaining
+        df['remaining'] = df['original_size']
+        df.loc[df['sold_50'] == 1, 'remaining'] -= df['original_size'] * 0.5
+        df.loc[df['sold_100'] == 1, 'remaining'] -= df['original_size'] * 0.25
+        df.loc[df['stopped'] == 1, 'remaining'] = 0
+        
+        df['current_value'] = df['remaining'] * df['entry_price']
+        
+        st.dataframe(
+            df[['token_id', 'entry_price', 'original_size', 'remaining', 'current_value']],
+            use_container_width=True,
+            column_config={
+                "token_id": "Token ID",
+                "entry_price": st.column_config.NumberColumn("Entry Price", format="$%.4f"),
+                "original_size": "Size",
+                "remaining": "Remaining",
+                "current_value": st.column_config.NumberColumn("Value", format="$%.2f")
+            }
+        )
+    else:
+        st.info("No positions found")
+
+elif page == "📝 Ledger":
+    st.header("📝 Transaction Ledger")
+    
+    if not data['recent_df'].empty:
+        # Date filter
+        st.subheader("Filter Trades")
+        col1, col2 = st.columns(2)
+        with col1:
+            side_filter = st.multiselect("Filter by Side", 
+                                        options=['BUY', 'SELL'],
+                                        default=['BUY', 'SELL'])
+        
+        # Apply filter
+        filtered_df = data['recent_df'][data['recent_df']['side'].isin(side_filter)]
+        
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No ledger entries found")
+
+elif page == "⚙️ Settings":
+    st.header("⚙️ Bot Settings")
+    
+    # Display current .env settings
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            env_content = f.read()
+        
+        st.subheader("Current Configuration (.env)")
+        st.code(env_content, language="bash")
+        
+        # Bot status
+        st.subheader("🤖 Bot Status")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("📊 Mode: Monitor/Dry Run")
+        with col2:
+            st.info(f"🕐 Last Update: {datetime.now().strftime('%H:%M:%S')}")
+    else:
+        st.warning(".env file not found")
+
+# Footer
+st.markdown("---")
+st.caption(f"Dashboard refreshed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption("Click 'Refresh Now' in sidebar to update data")
