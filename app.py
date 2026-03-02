@@ -212,10 +212,58 @@ else:
     # Create a temporary database for demo
     demo_db = tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False)
     DB_PATH = demo_db.name
-    # Initialize empty tables
+    # Initialize empty tables with correct schema
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE TABLE IF NOT EXISTS ledger (ts INTEGER, action TEXT, price REAL, size REAL, usd REAL, note TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS my_positions (token_id TEXT, entry_price REAL, size REAL, status TEXT)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ledger (
+            ts INTEGER,
+            token_id TEXT,
+            condition_id TEXT,
+            action TEXT,
+            price REAL,
+            size REAL,
+            usd REAL,
+            note TEXT,
+            source TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS my_positions (
+            token_id TEXT PRIMARY KEY,
+            condition_id TEXT,
+            entry_price REAL,
+            size REAL,
+            entry_time INTEGER,
+            status TEXT DEFAULT ACTIVE
+        )
+    """)
+    # Insert demo data
+    import random
+    import time
+    now = int(time.time())
+    # Demo ledger entries
+    for i in range(10):
+        ts = now - (i * 3600)
+        action = random.choice(['BUY', 'SELL', 'REDEEM', 'EXPIRE'])
+        price = round(random.uniform(0.5, 0.99), 2)
+        size = round(random.uniform(1, 10), 2)
+        usd = price * size
+        conn.execute(
+            "INSERT INTO ledger (ts, action, price, size, usd, note) VALUES (?, ?, ?, ?, ?, ?)",
+            (ts, action, price, size, usd, f"Demo {action}")
+        )
+    
+    # Demo active positions
+    for i in range(3):
+        token_id = f"demo_token_{i}"
+        entry_price = round(random.uniform(0.5, 0.95), 2)
+        size = round(random.uniform(1, 5), 2)
+        entry_time = now - (i * 7200)
+        conn.execute(
+            "INSERT INTO my_positions (token_id, entry_price, size, entry_time, status) VALUES (?, ?, ?, ?, ?)",
+            (token_id, entry_price, size, entry_time, 'ACTIVE')
+        )
+    conn.commit()
     conn.close()
 
 try:
