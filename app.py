@@ -17,7 +17,7 @@ st.set_page_config(
 # Password protection
 def check_password():
     def password_entered():
-        if st.session_state["password"] == st.secrets["money"]:
+        if st.session_state["password"] == st.secrets["DASHBOARD_PASSWORD"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"]
         else:
